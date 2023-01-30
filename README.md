@@ -1,2 +1,2 @@
 # D10_calculator
-This Rmarkdown takes in raw CFU data with attached descriptors and determines the D10 value
+This Rmarkdown takes in raw CFU data with attached descriptors and determines the D10 value. To do so, the survival of each plate is determined relative to the mean of counts of respective biological replicate sham. A table of the mean survival is produced along with a graphical summary. A log model is then fit to predict the survival using the dose. The survival at 200Gy is then found. The D10 must be manually solved for. Finally, a summary plot is produced showing the mean survival percents, the fit line, and the D10.
