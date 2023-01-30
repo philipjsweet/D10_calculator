@@ -1,0 +1,131 @@
+---
+title: "D10_finder"
+author: "Philip Sweet"
+date: "2023-01-10"
+output: html_document
+---
+
+This Rmarkdown takes in raw CFU data with attached descriptors and determines the D10 value. To do so, the survival of each plate is determined relative to the mean of counts of respective biological replicate sham. A table of the mean survival is produced along with a graphical summary. A log model is then fit to predict the survival using the dose. The survival at 200Gy is then found. The D10 must be manually solved for. Finally, a summary plot is produced showing the mean survival percents, the fit line, and the D10. 
+
+CFU data should be a .csv with the following columns 
+
+1. BioRep: Biological Replicate, sham data denoted as "0" required per biological replicate. Catagorical. 
+
+1. Dose: Dose in Gy,numeric.
+
+1. CFU: Counts per plate, numeric
+
+1. TechRep: Not required, but advised. Numeric.
+
+If data is correctly formated, the only change required is to solve for predicted d10 (Chunk 4) and to fine tune the final graph (Chunk 6)
+
+
+```{r setup, include=FALSE}
+
+## load packages
+
+library(tidyverse)
+library(purrr)
+library(cowplot)
+
+## read in data
+
+read.csv("CFU_data.csv") -> cfu
+
+
+```
+
+```{r data process, echo = FALSE}
+
+## Find percent survival by Dose and BioRep
+cfu %>%
+  group_by(BioRep,Dose)%>%
+  mutate(CFU_mean = mean(CFU)) %>% ## Calculate BioRep mean counts
+  ungroup()%>%
+  group_by(BioRep) %>% 
+  mutate(Pect = (CFU)/(CFU_mean[Dose == 0])*100) -> data ## Calculate survival against BioRep sham mean  
+
+
+## Summarize survival
+data %>%
+  group_by(BioRep,Dose) %>%
+  summarize(mean_surv = mean(Pect)) -> data_s
+
+data_s
+```
+
+
+```{r fit model}
+data %>%
+  ggplot(aes(x = Dose, y = Pect, color = BioRep)) +
+  geom_jitter() +
+  theme_cowplot()
+
+  
+lm(log(data$Pect)~data$Dose) -> ab_model  
+
+ summary(ab_model)
+
+```
+ 
+ Input model outputs into the variables below to calculate survival at 200Gy.
+ 
+```{r solve for D10 and survival at 200Gy, echo = FALSE}
+
+ab_int = exp(as.numeric(ab_model$coefficients[1]))
+
+ab_slope = exp(as.numeric(ab_model$coefficients[2]))
+
+## Percent Survival at 200Gy 
+two_hund = ab_int * ab_slope^200
+
+two_hund
+
+ab_int * ab_slope^420 ## UPDATE TO SOLVE For D10
+
+d10_found <- 420
+```
+
+Survival at 200Gy is 40% and the D10 looks to be more like 540Gy so not a sucess for the model. Previous paper did state a D10 of 500Gy when in meat so this is not a total surprise. 
+
+```{r raw cfu plot, echo = FALSE}
+
+ggplot(data, aes(x = Dose, y = Pect)) +
+  geom_point() +
+  geom_hline(yintercept = 10, linetype ="dashed", color = "red") +
+  xlim(0,200) +
+  theme_cowplot() +
+  ggtitle("Percent Survival")
+
+```
+
+
+
+
+```{r final plots, echo = FALSE}
+
+max_point = d10_found + 50 ## largest value on graph
+
+## predict points for line defined by the model
+
+graph_ab <- data.frame(Dose = c(pretty(1:max_point, n=10))) 
+graph_ab %>%
+  mutate(perct = ab_int * ab_slope^Dose) -> graph_ab
+
+## use the BioRep mea survivals found above for the points and the line defined by the equation for the dashed line
+ggplot(data_s, aes(x = Dose, y = mean_surv)) +
+  geom_point(aes(shape = BioRep)) +
+  geom_hline(yintercept = 10, linetype ="dashed", color = "red") +
+  xlim(0,max_point) + 
+  theme_cowplot() +
+  geom_smooth(data = graph_ab, aes(x = Dose, y = perct), se = FALSE, linetype = "dashed") +
+  geom_point(aes(x=(d10_found),y=10),colour="black", size = 6, shape = 5) +
+  ylab("Viability (%)") +
+  xlab("Dose (Gy)") -> d10_plot
+
+d10_plot
+
+#ggsave("d10_plot.png", d10_plot, height = 5, width = 3)
+
+
+```
